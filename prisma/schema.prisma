@@ -22,3 +22,30 @@ enum Conta {
   CPF
   CNPJ
 }
+
+enum Luminosidade {
+  SOMBRA
+  MEIA_SOMBRA
+  SOL_PLENO
+}
+
+model Planta {
+  id              Int          @id @default(autoincrement())
+  nome            String
+  especie         String
+  preco           Int
+  estoque         Int
+  luminosidade    Luminosidade
+  petFriendly     Boolean
+  regaACadaDias   Int
+  createdAt       DateTime    @default(now())
+  updatedAt       DateTime    @updatedAt
+  
+}
+
+// id: é o identificador de cada planta (será um inteiro por causa do Int)
+// @id: define o identificador principal e  @default(autoincrement()): gera o identificador automaticamente.
+// Por exemplo, as plantas cadastradas poderão receber os IDs 1, 2, 3 e assim por diante.
+
+// @default(now()): define o momento atual como valor padrão na criação.
+// @updatedAt faz com que o Prisma atualize esse campo quando o registro é modificado por meio dele.
