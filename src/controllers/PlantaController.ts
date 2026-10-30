@@ -107,7 +107,7 @@ export const createPlanta = async (req: Request, res: Response) => {
 
 export const readAllPlantas = async (req: Request, res: Response) => {
   try {
-    const { luminosidade, petFriendly } = req.query;
+    const { luminosidade, petFriendly, nome, ordem } = req.query;
 
     if (
       luminosidade !== undefined &&
@@ -129,10 +129,30 @@ export const readAllPlantas = async (req: Request, res: Response) => {
       });
     }
 
-    // Essa conversão da linha 135 fa com que "true" -> true; "false" -> false e ausência de parâmetro -> undefined
+    // BÔNUS 1: valida se o parâmetro nome é um texto.
+    if (nome !== undefined && typeof nome !== "string") {
+      return res.status(400).json({
+        message: "O parâmetro nome deve ser um texto.",
+      });
+    }
+
+    // BÔNUS 2: aceita apenas as ordenações por nome ou preço.
+    if (
+      ordem !== undefined &&
+      ordem !== "nome" &&
+      ordem !== "preco"
+    ) {
+      return res.status(400).json({
+        message: "A ordenação deve ser nome ou preco.",
+      });
+    }
+
+    // Essa conversão faz com que "true" -> true; "false" -> false e ausência de parâmetro -> undefined.
     const plantas = await PlantaRepository.findAllPlantas(
       luminosidade as string | undefined,
-      petFriendly === undefined ? undefined : petFriendly === "true"
+      petFriendly === undefined ? undefined : petFriendly === "true",
+      nome as string | undefined,
+      ordem as string | undefined
     );
 
     return res.status(200).json(plantas);
@@ -146,8 +166,7 @@ export const readAllPlantas = async (req: Request, res: Response) => {
 };
 
 // .json(plantas): envia as plantas ao cliente no formato JSON.
-// .findAllPlantas(): chama a função que criei anteriormente, a qual busca todas as plantas.
-
+// .findAllPlantas(): chama a função do repositório, que busca as plantas aplicando os filtros e a ordenação solicitados.
 
 export const readPlantaById = async (req: Request, res: Response) => {
   try {
@@ -183,6 +202,12 @@ export const updatePlanta = async (req: Request, res: Response) => {
     const id = Number(req.params.id);
     const dados = req.body;
     
+    // Valida se o ID recebido na URL é um número inteiro positivo.
+    if (!Number.isInteger(id) || id <= 0) {
+      return res.status(400).json({
+        message: "O ID deve ser um número inteiro positivo.",
+      });
+    }
 
     // Consulta o banco de dados para verificar se a planta existe.
     const planta = await PlantaRepository.findPlantaById(id);
@@ -344,6 +369,13 @@ export const deletePlanta = async (req: Request, res: Response) => {
     // O ID chega da URL como texto, então o converto para número.
     const id = Number(req.params.id);
 
+    // Valida se o ID é um número inteiro positivo antes de acessar o banco de dados.
+    if (!Number.isInteger(id) || id <= 0) {
+      return res.status(400).json({
+        message: "O ID deve ser um número inteiro positivo.",
+      });
+    }
+
     // Busca a planta no banco de dados usando seu ID.
     const planta = await PlantaRepository.findPlantaById(id);
 
@@ -374,6 +406,7 @@ export const deletePlanta = async (req: Request, res: Response) => {
 // Exemplo do funcionamento dessa função:
 // Enviam uma requisição para excluir a planta de ID 7: DELETE /plantas/7
 // Converte o ID: transforma "7" no número 7.
+// Valida o ID: confirma que 7 é um número inteiro positivo. Se for inválido (como "abc"), retorna 400.
 // Procura a planta: consulta o banco de dados para verificar se existe uma planta com esse ID.
 // Se a planta não existir, retorna 404 e encerra a função. Se existir, continua para a próxima instrução.
 // Exclui a planta: chama PlantaRepository.deletePlanta(7).
@@ -418,16 +451,18 @@ export const sellPlanta = async (req: Request, res: Response) => {
       return res.status(404).json({ message: "Planta não encontrada." });
     }
 
-    // Verifica se a quantidade solicitada é maior do que o estoque disponível.
-    if (planta.estoque < quantidade) {
-      // Retorna erro 400 indicando a falta de estoque sem alterar a base de dados.
+    // Tenta decrementar a quantidade vendida de forma condicional diretamente no banco.
+    const vendaSucesso = await PlantaRepository.sellPlanta(id, quantidade);
+
+    // Se nenhuma linha foi alterada, significa que o estoque mudou simultaneamente e ficou insuficiente.
+    if (!vendaSucesso) {
       return res.status(400).json({
         message: `Estoque insuficiente. Estoque atual: ${planta.estoque}`,
       });
     }
 
-    // Decrementa a quantidade vendida chamando a função do repositório.
-    const updatedPlanta = await PlantaRepository.sellPlanta(id, quantidade);
+    // Busca os dados atualizados da planta para retornar a resposta final ao cliente.
+    const updatedPlanta = await PlantaRepository.findPlantaById(id);
 
     // Retorna status 200 OK com os dados atualizados da planta.
     return res.status(200).json(updatedPlanta);
@@ -465,5 +500,23 @@ export const getEstoqueValorTotal = async (req: Request, res: Response) => {
     console.error(error);
     // Retorna erro 500 para falhas do servidor.
     return res.status(500).json({ message: "Erro ao calcular valor do estoque." });
+  }
+};
+
+// BÔNUS 3: consulta as plantas que possuem estoque igual a zero.
+export const readPlantasEsgotadas = async (
+  req: Request,
+  res: Response
+) => {
+  try {
+    const plantas = await PlantaRepository.findPlantasEsgotadas();
+
+    return res.status(200).json(plantas);
+  } catch (error) {
+    console.error(error);
+
+    return res.status(500).json({
+      message: "Erro ao buscar plantas esgotadas.",
+    });
   }
 };

@@ -2,7 +2,7 @@ import { Prisma } from "@prisma/client";
 import prisma from "@database";
 
 // O prisma disponibiliza tipos para descrever os dados que enviaremos ao banco.
-// E a segunda linha, faz eu conseguir ter acesso a ferramente que vai executar as operações no banco.
+// E a segunda linha, faz eu conseguir ter acesso a ferramenta que vai executar as operações no banco.
 
 export const createPlanta = async (data: Prisma.PlantaCreateInput) => {
   return await prisma.planta.create({ data: data });
@@ -16,33 +16,54 @@ export const createPlanta = async (data: Prisma.PlantaCreateInput) => {
 // .create(): solicita a criação de um registro.
 // { data: data }: informa quais dados devem ser utilizados nessa criação.
 
-export const findAllPlantas = async (luminosidade?: string, petFriendly?: boolean) => {
- 
+export const findAllPlantas = async (
+  luminosidade?: string,
+  petFriendly?: boolean,
+  nome?: string,
+  ordem?: string
+) => {
   // Criei um objeto para armazenar os filtros:
   // Prisma.PlantaWhereInput é um tipo fornecido pelo Prisma que descreve as condições
   // que podemos utilizar na consulta de plantas.
   const filtros: Prisma.PlantaWhereInput = {};
-  
 
   // Se houver uma luminosidade, adicionamos essa condição ao objeto
   if (luminosidade !== undefined) {
-    filtros.luminosidade = luminosidade as Prisma.EnumLuminosidadeFilter["equals"];
+    filtros.luminosidade =
+      luminosidade as Prisma.EnumLuminosidadeFilter["equals"];
   }
 
   if (petFriendly !== undefined) {
     filtros.petFriendly = petFriendly;
   }
-  
+
+  // BÔNUS 1: busca plantas pelo nome sem diferenciar maiúsculas e minúsculas.
+  if (nome !== undefined && nome.trim() !== "") {
+    filtros.nome = {
+      contains: nome,
+      mode: "insensitive",
+    };
+  }
+
+  // BÔNUS 2: define a ordenação das plantas por preço ou nome.
+  let orderBy: Prisma.PlantaOrderByWithRelationInput | undefined;
+
+  if (ordem === "preco") {
+    orderBy = { preco: "asc" };
+  } else if (ordem === "nome") {
+    orderBy = { nome: "asc" };
+  }
+
   // O Prisma recebe as condições reunidas no objeto filtros.
-  // Assim, os dois filtros podem ser utilizados juntos, separadamente ou não ser utilizados.
+  // Assim, os filtros podem ser utilizados juntos, separadamente ou não ser utilizados.
   return await prisma.planta.findMany({
     where: filtros,
+    orderBy: orderBy,
   });
 };
 
 // prisma.planta.findMany(): solicita ao Prisma que busque todos os registros de plantas.
-// Não precisa passar parâmetro porque não estou querendo buscar por ID, nome ou luminsoidade, quero buscar TODAS as plantas.
-
+// Os filtros e a ordenação são opcionais, permitindo buscar todas as plantas ou refinar os resultados.
 
 export const findPlantaById = async (id: number) => {
   return await prisma.planta.findUnique({ where: { id: id } });
@@ -52,9 +73,12 @@ export const findPlantaById = async (id: number) => {
 // retorna os dados (que estão cadastrados no prisma) da planta que possui esse identificador.
 // o findUnique() pode retornar null se não encontrar uma planta com aquele ID fornecido.
 
-export const updatePlanta = async (id: number, data: Prisma.PlantaUpdateInput) => {
+export const updatePlanta = async (
+  id: number,
+  data: Prisma.PlantaUpdateInput
+) => {
   return await prisma.planta.update({ where: { id: id }, data: data });
-}
+};
 
 // data: Prisma.PlantaUpdateInput: recebe os campos que desejo alterar.
 // prisma.planta.update(...): solicita ao Prisma a atualização do registro.
@@ -66,17 +90,25 @@ export const deletePlanta = async (id: number) => {
 // prisma.planta.delete(): solicita ao Prisma que exclua o registro.
 // where: { id: id }: identifica qual registro será excluído.
 
-// Venda de planta (decremento de estoque)
-// Atualiza o registo utilizando a instrução decrement nativa do Prisma no campo estoque.
+// Venda de planta com atualização atômica e condicional
+// Utiliza updateMany para atualizar o estoque apenas se a quantidade no banco for maior ou igual à solicitada.
+// Isso impede condições de corrida em compras simultâneas diretamente no banco de dados.
 export const sellPlanta = async (id: number, quantidade: number) => {
-  return await prisma.planta.update({
-    where: { id: id },
+  const resultado = await prisma.planta.updateMany({
+    where: {
+      id: id,
+      estoque: {
+        gte: quantidade,
+      },
+    },
     data: {
       estoque: {
         decrement: quantidade,
       },
     },
   });
+
+  return resultado.count > 0;
 };
 
 // Busca de dados agregados do estoque
@@ -87,6 +119,15 @@ export const getEstoqueInfo = async () => {
     select: {
       preco: true,
       estoque: true,
+    },
+  });
+};
+
+// BÔNUS 3: busca todas as plantas cujo estoque seja igual a zero.
+export const findPlantasEsgotadas = async () => {
+  return await prisma.planta.findMany({
+    where: {
+      estoque: 0,
     },
   });
 };

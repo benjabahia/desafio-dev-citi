@@ -23,6 +23,7 @@ routes.post("/plantas", PlantaController.createPlanta);
 // 2. Rotas estáticas (precisam vir antes de :id)
 routes.get("/plantas", PlantaController.readAllPlantas);
 routes.get("/plantas/estoque/valor-total", PlantaController.getEstoqueValorTotal);
+routes.get("/plantas/esgotadas", PlantaController.readPlantasEsgotadas);
 
 // 3. Rotas dinâmicas com :id
 routes.get("/plantas/:id", PlantaController.readPlantaById);
